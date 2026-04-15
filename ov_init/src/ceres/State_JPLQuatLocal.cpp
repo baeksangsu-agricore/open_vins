@@ -48,9 +48,41 @@ bool State_JPLQuatLocal::Plus(const double *x, const double *delta, double *x_pl
   return true;
 }
 
-bool State_JPLQuatLocal::ComputeJacobian(const double *x, double *jacobian) const {
+bool State_JPLQuatLocal::PlusJacobian(const double *x, double *jacobian) const {
   Eigen::Map<Eigen::Matrix<double, 4, 3, Eigen::RowMajor>> j(jacobian);
   j.topRows<3>().setIdentity();
   j.bottomRows<1>().setZero();
+  return true;
+}
+
+bool State_JPLQuatLocal::Minus(const double *y, const double *x, double *y_minus_x) const {
+  // Compute the quaternion difference: delta = q_y * q_x^{-1}
+  Eigen::Map<const Eigen::Vector4d> q_y(y);
+  Eigen::Map<const Eigen::Vector4d> q_x(x);
+
+  // q_x_inv for JPL: negate the vector part
+  Eigen::Vector4d q_x_inv;
+  q_x_inv << -q_x(0), -q_x(1), -q_x(2), q_x(3);
+
+  Eigen::Vector4d d_q = ov_core::quat_multiply(q_y, q_x_inv);
+
+  // Convert to axis-angle
+  Eigen::Map<Eigen::Vector3d> d_th(y_minus_x);
+  double scalar = d_q(3);
+  Eigen::Vector3d vector = d_q.head<3>();
+  double sin_half = vector.norm();
+  if (sin_half < 1e-8) {
+    d_th = 2.0 * vector;
+  } else {
+    double angle = 2.0 * std::atan2(sin_half, scalar);
+    d_th = (angle / sin_half) * vector;
+  }
+  return true;
+}
+
+bool State_JPLQuatLocal::MinusJacobian(const double *x, double *jacobian) const {
+  Eigen::Map<Eigen::Matrix<double, 3, 4, Eigen::RowMajor>> j(jacobian);
+  j.leftCols<3>().setIdentity();
+  j.rightCols<1>().setZero();
   return true;
 }
